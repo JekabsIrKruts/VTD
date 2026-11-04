@@ -1,6 +1,13 @@
 """Game data and simulation rules, independent from the Pygame user interface."""
 
+# GAME RULES CODE MAP
+# 1. Screen route and movement settings.
+# 2. Enemy, frog, upgrade, and wave configuration.
+# 3. Score, HP, currency, and editable quiz question banks.
+# 4. Game: match state, questions, waves, placement, upgrades, and simulation.
+
 import math
+import random
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 450
@@ -44,7 +51,7 @@ ENEMY_TYPES = {
         "speed": 200,
         "damage": 20,
         "hp": 75,
-        "wing_reward": 55,
+        "wing_reward": 75,
         "color": (230, 55, 55)},
 
     "scorpion_musas": {
@@ -91,7 +98,7 @@ ENEMY_TYPES = {
         "radius": 60,
         "speed": 50,
         "damage": 1000,
-        "hp": 10000,
+        "hp": 50000,
         "wing_reward": 1,
         "color": (112, 111, 105)},
 }
@@ -146,6 +153,7 @@ TOWER_TYPES = {
         "projectile_speed": 300,
         "projectile_size": 13,
         "projectile_color": (255, 90, 180),
+        "projectile_sprite": "surinam_horned_frog_spike",
     },
     "glass frog": {
         "name": "Glass Frog",
@@ -218,7 +226,7 @@ TOWER_T1_TYPES = {
         "color": (26, 89, 38),
         "projectile_speed": 320,
         "projectile_size": 13,
-        "projectile_color": (255, 90, 180),
+        "projectile_color": (79, 79, 78),
     },
     "surinam horned frog": {
         "name": "Spikier Spikes",
@@ -239,6 +247,7 @@ TOWER_T1_TYPES = {
         "projectile_speed": 600,
         "projectile_size": 15,
         "projectile_color": (0, 23, 1),
+        "projectile_sprite": "surinam_horned_frog_spike",
     },
     "glass frog": {
         "name": "Clearer Glass",
@@ -314,7 +323,7 @@ TOWER_T2_TYPES = {
         "color": (21, 74, 32),
         "projectile_speed": 350,
         "projectile_size": 10,
-        "projectile_color": (33, 0, 18),
+        "projectile_color": (79, 79, 78),
     },
     "surinam horned frog": {
         "name": "Speedy Spikes",
@@ -333,6 +342,7 @@ TOWER_T2_TYPES = {
         "projectile_speed": 800,
         "projectile_size": 16,
         "projectile_color": (0, 23, 1),
+        "projectile_sprite": "surinam_horned_frog_spike",
     },
     "glass frog": {
         "name": "Glisterring Glossy Glass",
@@ -421,6 +431,7 @@ TOWER_T3_TYPES = {
         "projectile_speed": 350,
         "projectile_size": 21,
         "projectile_color": (33, 0, 18),
+        "projectile_sprite": "black_rain_frog_T3_projectile",
         "bounce_targets": 6,
         "special_effect": "bouncing_boulder",
     },
@@ -443,6 +454,7 @@ TOWER_T3_TYPES = {
         "projectile_speed": 850,
         "projectile_size": 16,
         "projectile_color": (0, 23, 1),
+        "projectile_sprite": "surinam_horned_frog_rocket",
         "explosion_radius": 100,
         "explosion_targets": 2,
         "explosion_damage_multiplier": 0.5,
@@ -477,13 +489,13 @@ WAVES = [
     {"enemies": [("musas", 10)], "spawn_interval": 0.7},
     {"enemies": [("musas", 8), ("bee_musas", 6)], "spawn_interval": 0.6},
     {"enemies": [("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ("musas", 3), ("bee_musas", 3), ], "spawn_interval": 0.1},
-    {"enemies": [("stalk_eyed_musas", 12)], "spawn_interval": 0.8},
-    {"enemies": [("bee_musas", 10), ("stalk_eyed_musas", 5), ("bee_musas", 10), ("stalk_eyed_musas", 5), ("bee_musas", 10), ("stalk_eyed_musas", 5), ], "spawn_interval": 0.5},
+    {"enemies": [("stalk_eyed_musas", 12)], "spawn_interval": 0.5},
+    {"enemies": [("bee_musas", 10), ("stalk_eyed_musas", 13), ("bee_musas", 10), ("stalk_eyed_musas", 13), ("bee_musas", 10), ("stalk_eyed_musas", 13), ], "spawn_interval": 0.5},
     {"enemies": [("bee_musas", 15), ("picture_winged_musas", 3), ("bee_musas", 15)], "spawn_interval": 0.3},
     {"enemies": [("scorpion_musas", 20)], "spawn_interval": 0.15},
-    {"enemies": [("mydas_musas", 5), ("scorpion_musas", 15)], "spawn_interval": 0.3},
-    {"enemies": [("mydas_musas", 6), ("picture_winged_musas", 20), ("stalk_eyed_musas", 30)], "spawn_interval": 0.1},
-    {"enemies": [("mama_musa", 1)], "spawn_interval": 0.35},
+    {"enemies": [("mydas_musas", 10), ("scorpion_musas", 25), ("stalk_eyed_musas", 20)], "spawn_interval": 0.3},
+    {"enemies": [("mydas_musas", 20), ("picture_winged_musas", 20), ("stalk_eyed_musas", 30)], "spawn_interval": 0.1},
+    {"enemies": [("mama_musa", 1)], "spawn_interval": 0.1},
 ]
 
 
@@ -500,138 +512,315 @@ DEFEATED_ENEMY_FADE_SECONDS = 0.5
 STARTING_WINGS = 1000
 WINGS_PER_HP = 3
 
-# QUIZ CONTENT: edit prompts and answers; `correct` is an answer index from 0 to 2.
+# QUIZ QUESTION BANKS: Edit the text; correct uses 0 for A, 1 for B, and 2 for C.
 FROG_QUESTIONS = [
+    # Frog question 01
     {
-        "question": "Placeholder frog question 1",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What is a group of frogs called?",
+        "answers": ["A herd", "An army", "A flock"],
+        "correct": 1,
+    },
+    # Frog question 02
+    {
+        "question": "What are baby frogs called?",
+        "answers": ["Pups", "Fry", "Tadpoles"],
         "correct": 2,
     },
+    # Frog question 03
     {
-        "question": "Placeholder frog question 2",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "How do frogs mainly take in water?",
+        "answers": ["Through their skin", "By sipping with their tongue", "Through their nostrils"],
+        "correct": 0,
+    },
+    # Frog question 04
+    {
+        "question": "Which animal class do frogs belong to?",
+        "answers": ["Reptiles", "Mammals", "Amphibians"],
         "correct": 2,
     },
+    # Frog question 05
     {
-        "question": "Placeholder frog question 3",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which scientific order do frogs belong to?",
+        "answers": ["Caudata", "Anura", "Gymnophiona"],
+        "correct": 1,
+    },
+    # Frog question 06
+    {
+        "question": "Which of these is among the most poisonous animals on Earth?",
+        "answers": ["Common frog", "Bullfrog", "Golden poison frog"],
         "correct": 2,
     },
+    # Frog question 07
     {
-        "question": "Placeholder frog question 4",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Where do most frogs lay their eggs?",
+        "answers": ["In or near water", "Deep underground", "In bird nests"],
+        "correct": 0,
+    },
+    # Frog question 08
+    {
+        "question": "What is a mass of frog eggs called?",
+        "answers": ["Froghive", "Frogspawn", "Frogclutch"],
+        "correct": 1,
+    },
+    # Frog question 09
+    {
+        "question": "How do young tadpoles breathe?",
+        "answers": ["With lungs", "Only through their mouth", "With gills"],
         "correct": 2,
     },
+    # Frog question 10
     {
-        "question": "Placeholder frog question 5",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which is the largest frog in the world?",
+        "answers": ["Goliath frog", "Tomato frog", "Red-eyed tree frog"],
+        "correct": 0,
+    },
+    # Frog question 11
+    {
+        "question": "How does a frog catch its prey?",
+        "answers": ["With sharp teeth", "With a sticky, fast tongue", "With its front claws"],
+        "correct": 1,
+    },
+    # Frog question 12
+    {
+        "question": "What do frogs do with their eyes when swallowing?",
+        "answers": ["Close them tightly", "Roll them backward", "Pull them down into the head to push food down"],
         "correct": 2,
     },
+    # Frog question 13
     {
-        "question": "Placeholder frog question 6",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What do male frogs use to make their calls louder?",
+        "answers": ["A vocal sac", "Their gills", "Their back legs"],
+        "correct": 0,
+    },
+    # Frog question 14
+    {
+        "question": "Which sex of frog usually does the calling?",
+        "answers": ["Females", "Males", "Both equally"],
+        "correct": 1,
+    },
+    # Frog question 15
+    {
+        "question": "Which frog can survive being partly frozen in winter?",
+        "answers": ["Goliath frog", "Wood frog", "Poison dart frog"],
+        "correct": 1,
+    },
+    # Frog question 16
+    {
+        "question": "What is the correct order of a frog’s life cycle?",
+        "answers": ["Egg → adult → tadpole → froglet", "Tadpole → egg → froglet → adult", "Egg → tadpole → froglet → adult"],
         "correct": 2,
     },
+    # Frog question 17
     {
-        "question": "Placeholder frog question 7",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What do most tadpoles eat?",
+        "answers": ["Mainly algae and plant matter", "Small fish", "Large insects"],
+        "correct": 0,
+    },
+    # Frog question 18
+    {
+        "question": "Compared to frogs, toads usually have…",
+        "answers": ["Smooth, slimy skin", "Dry, warty skin", "Scales"],
+        "correct": 1,
+    },
+    # Frog question 19
+    {
+        "question": "What is special about a glass frog?",
+        "answers": ["It glows in the dark", "It is always blue", "Parts of its belly skin are see-through"],
         "correct": 2,
     },
+    # Frog question 20
     {
-        "question": "Placeholder frog question 8",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "How does Wallace’s flying frog “fly”?",
+        "answers": ["It glides using large webbed feet", "It flaps small wings", "It uses its tail as a propeller"],
+        "correct": 0,
+    },
+    # Frog question 21
+    {
+        "question": "On which continent are there no native frogs?",
+        "answers": ["Australia", "Antarctica", "South America"],
+        "correct": 1,
+    },
+    # Frog question 22
+    {
+        "question": "Where is the red-eyed tree frog native to?",
+        "answers": ["Europe", "Central America", "Central Asia"],
+        "correct": 1,
+    },
+    # Frog question 23
+    {
+        "question": "Why can frogs jump so far?",
+        "answers": ["They have springy bellies", "They have small wings", "They have long, muscular hind legs"],
         "correct": 2,
     },
+    # Frog question 24
     {
-        "question": "Placeholder frog question 9",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What does a frog’s eye position give it?",
+        "answers": ["A very wide field of view", "Sight only straight ahead", "Sight only in complete darkness"],
+        "correct": 0,
+    },
+    # Frog question 25
+    {
+        "question": "Why was the cane toad introduced to Australia in 1935?",
+        "answers": ["To eat mosquitoes", "To control cane beetles", "To eat rats"],
+        "correct": 1,
+    },
+    # Frog question 26
+    {
+        "question": "What do frogs often do with their shed skin?",
+        "answers": ["Bury it", "Hang it on plants", "Eat it"],
         "correct": 2,
     },
+    # Frog question 27
     {
-        "question": "Placeholder frog question 10",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Roughly how many frog species exist?",
+        "answers": ["About 70", "About 700", "About 7,000"],
         "correct": 2,
     },
+    # Frog question 28
     {
-        "question": "Placeholder frog question 11",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
+        "question": "What is chytrid fungus a major threat to?",
+        "answers": ["Amphibians worldwide", "Only birds", "Only fish"],
+        "correct": 0,
     },
+    # Frog question 29
     {
-        "question": "Placeholder frog question 12",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
+        "question": "What is the round disc behind a frog’s eye used for?",
+        "answers": ["Smelling", "Hearing (it’s the eardrum, or tympanum)", "Storing water"],
+        "correct": 1,
     },
+    # Frog question 30
     {
-        "question": "Placeholder frog question 13",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
-    },
-    {
-        "question": "Placeholder frog question 14",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
-    },
-    {
-        "question": "Placeholder frog question 15",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which feature helps frogs swim well?",
+        "answers": ["Fins on their back", "A flat, paddle-like tail", "Webbed hind feet"],
         "correct": 2,
     },
 ]
+
+# FLY QUESTIONS: Edit the text below; correct uses 0 for A, 1 for B, and 2 for C.
 FLY_QUESTIONS = [
+    # Fly question 01
     {
-        "question": "Placeholder fly question 1",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which insect order do true flies belong to?",
+        "answers": ["Hymenoptera", "Diptera", "Lepidoptera"],
+        "correct": 1,
+    },
+    # Fly question 02
+    {
+        "question": "How many wings do true flies have?",
+        "answers": ["Two", "Four", "Six"],
+        "correct": 0,
+    },
+    # Fly question 03
+    {
+        "question": "What are halteres?",
+        "answers": ["Tiny organs for smelling", "Hearing organs", "Small knob-like organs that help flies balance in flight"],
         "correct": 2,
     },
+    # Fly question 04
     {
-        "question": "Placeholder fly question 2",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What are fly larvae commonly called?",
+        "answers": ["Maggots", "Caterpillars", "Nymphs"],
+        "correct": 0,
+    },
+    # Fly question 05
+    {
+        "question": "What does a housefly use to taste things?",
+        "answers": ["Its antennae only", "Its feet", "Its wings"],
+        "correct": 1,
+    },
+    # Fly question 06
+    {
+        "question": "What is the scientific name of the common fruit fly?",
+        "answers": ["Musca domestica", "Aedes aegypti", "Drosophila melanogaster"],
         "correct": 2,
     },
+    # Fly question 07
     {
-        "question": "Placeholder fly question 3",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "How long does a housefly typically live?",
+        "answers": ["About 2–4 weeks", "About 5 years", "About 1 day"],
+        "correct": 0,
+    },
+    # Fly question 08
+    {
+        "question": "What kind of eyes do flies have?",
+        "answers": ["Single-lens eyes", "Compound eyes", "No eyes"],
+        "correct": 1,
+    },
+    # Fly question 09
+    {
+        "question": "How do houseflies eat solid food?",
+        "answers": ["They chew it with jaws", "They swallow it whole", "They spit digestive fluid on it, then sip the liquid"],
         "correct": 2,
     },
+    # Fly question 10
     {
-        "question": "Placeholder fly question 4",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which scientist famously used fruit flies in genetics research?",
+        "answers": ["Thomas Hunt Morgan", "Charles Darwin", "Louis Pasteur"],
+        "correct": 0,
+    },
+    # Fly question 11
+    {
+        "question": "Which disease does the tsetse fly spread?",
+        "answers": ["Malaria", "Sleeping sickness", "Lyme disease"],
+        "correct": 1,
+    },
+    # Fly question 12
+    {
+        "question": "Roughly how many times per second does a housefly beat its wings?",
+        "answers": ["About 20", "About 2,000", "About 200"],
         "correct": 2,
     },
+    # Fly question 13
     {
-        "question": "Placeholder fly question 5",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "In warm conditions, how long can a housefly take to develop from egg to adult?",
+        "answers": ["About 1–2 weeks", "About 1 year", "About 1 day"],
+        "correct": 0,
+    },
+    # Fly question 14
+    {
+        "question": "Which plant catches flies with snapping leaves?",
+        "answers": ["Sunflower", "Venus flytrap", "Aloe vera"],
+        "correct": 1,
+    },
+    # Fly question 15
+    {
+        "question": "Why is it so hard to swat a fly?",
+        "answers": ["It uses echolocation", "It has a very large brain", "Its eyes process motion much faster than ours"],
         "correct": 2,
     },
+    # Fly question 16
     {
-        "question": "Placeholder fly question 6",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Hoverflies are harmless but look like…",
+        "answers": ["Spiders", "Ants", "Bees or wasps"],
         "correct": 2,
     },
+    # Fly question 17
     {
-        "question": "Placeholder fly question 7",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "Which of these is a true fly?",
+        "answers": ["Dragonfly", "Firefly", "Mosquito"],
         "correct": 2,
     },
+    # Fly question 18
     {
-        "question": "Placeholder fly question 8",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
+        "question": "How can flies walk on ceilings?",
+        "answers": ["They use magnetism", "They have adhesive pads on their feet", "They dig in with sharp claws only"],
+        "correct": 1,
     },
+    # Fly question 19
     {
-        "question": "Placeholder fly question 9",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
-        "correct": 2,
+        "question": "Why are blowflies useful in forensic science?",
+        "answers": ["They arrive quickly at remains, helping estimate time of death", "They can identify fingerprints", "They glow near evidence"],
+        "correct": 0,
     },
+    # Fly question 20
     {
-        "question": "Placeholder fly question 10",
-        "answers": ["wrong answer", "wrong answer", "correct answer"],
+        "question": "What are fruit flies strongly attracted to?",
+        "answers": ["Bright light only", "Plain water", "Ripe or fermenting fruit"],
         "correct": 2,
     },
 ]
 
-
+# MATCH MODEL: one Game instance stores state and rules for a single playthrough.
 class Game:
     """Store match state and apply game rules without drawing the screen."""
 
@@ -670,8 +859,11 @@ class Game:
         self.round_timer_started = False
         self.round_speed_multiplier = 1.0
         self.round_clear_bonus = 0
-        self.next_frog_question = 0
-        self.next_fly_question = 0
+        # Give each match a shuffled question order, without repeats in that match.
+        self.frog_question_deck = FROG_QUESTIONS.copy()
+        self.fly_question_deck = FLY_QUESTIONS.copy()
+        random.shuffle(self.frog_question_deck)
+        random.shuffle(self.fly_question_deck)
         self.fly_question_next_round = False
         self.towers = []
         self.projectiles = []
@@ -681,6 +873,7 @@ class Game:
         self.game_over = False
         self.game_finished = False
 
+    # ROUTE HELPERS: convert distance along the track into screen coordinates.
     def enemy_position(self, enemy):
         """Map an enemy's distance along the route to its screen coordinate."""
         distance = enemy["distance"]
@@ -695,6 +888,7 @@ class Game:
             distance -= length
         return position
 
+    # QUESTION AND PLANNING FLOW: quiz selection, rewards, and wave start.
     def needs_round_question(self):
         """Return whether the next wave needs its quiz before planning begins."""
         return (
@@ -729,12 +923,10 @@ class Game:
     def next_question(self):
         """Return the next quiz, its topic, and whether skipping is allowed."""
         if self.fly_question_next_round:
-            question = FLY_QUESTIONS[self.next_fly_question]
-            self.next_fly_question += 1
+            question = self.fly_question_deck.pop()
             self.fly_question_next_round = False
             return question, "Fly question", False
-        question = FROG_QUESTIONS[self.next_frog_question]
-        self.next_frog_question += 1
+        question = self.frog_question_deck.pop()
         return question, "Frog question", True
 
     def resolve_question(self, result, is_fly_question):
@@ -790,12 +982,7 @@ class Game:
         self.planning_phase = False
         return True
 
-    def destroy_all_enemies(self):
-        """Clear active, fading, and queued enemies for the debug button."""
-        self.enemies.clear()
-        self.defeated_enemies.clear()
-        self.wave_enemy_queue.clear()
-
+    # ENEMY DAMAGE AND FROG UPGRADES: target checks, rewards, and purchases.
     def enemy_is_present(self, enemy):
         """Check whether a live enemy or fading body can still receive a projectile."""
         return any(current is enemy for current in self.enemies) or any(
@@ -866,9 +1053,10 @@ class Game:
         if self.wings < data["price"] or not self.can_place_tower(center, tower_type, forbidden_rects):
             return False
         self.wings -= data["price"]
-        self.towers.append({"type": tower_type, "upgrade_tier": 0, "x": center[0], "y": center[1], "attack_cooldown": 0.0})
+        self.towers.append({"type": tower_type, "upgrade_tier": 0, "x": center[0], "y": center[1], "attack_cooldown": 0.0, "aim_rotation": 0.0})
         return True
 
+    # SIMULATION: spawn enemies, move them, fire frogs, move shots, and score.
     def update(self, dt):
         """Advance fades, spawning, enemy AI, frog attacks, projectiles, and scoring."""
         for enemy in self.defeated_enemies[:]:
@@ -953,8 +1141,6 @@ class Game:
         for tower in self.towers:
             data = self.tower_data(tower)
             tower["attack_cooldown"] = max(0.0, tower["attack_cooldown"] - dt)
-            if tower["attack_cooldown"] > 0:
-                continue
             in_range = []
             for enemy in self.enemies:
                 ex, ey = self.enemy_position(enemy)
@@ -962,10 +1148,18 @@ class Game:
                     in_range.append(enemy)
             if in_range:
                 target = max(in_range, key=lambda item: item["distance"])
+                target_x, target_y = self.enemy_position(target)
+                tower["aim_rotation"] = (
+                    -math.degrees(math.atan2(target_y - tower["y"], target_x - tower["x"]))
+                    - 90
+                )
+                if tower["attack_cooldown"] > 0:
+                    continue
                 self.projectiles.append({
                     "x": tower["x"], "y": tower["y"], "target": target,
                     "damage": data["damage"], "speed": data["projectile_speed"],
                     "size": data["projectile_size"], "color": data["projectile_color"],
+                    "projectile_sprite": data.get("projectile_sprite"),
                     "bonus_max_hp_damage_percent": data.get("bonus_max_hp_damage_percent", 0.0),
                     "stun_duration": data.get("stun_duration", 0.0),
                     "bounce_targets_remaining": data.get("bounce_targets", 0),

@@ -1,5 +1,10 @@
 """HTTP endpoints for leaderboard scores, browser pages, and admin actions."""
 
+# API CODE MAP
+# 1. Configuration and admin-password loading.
+# 2. Public leaderboard pages and score endpoints.
+# 3. Admin login/session and score-management endpoints.
+
 import hmac
 import os
 import secrets

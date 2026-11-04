@@ -1,5 +1,10 @@
 """SQLite operations for creating and managing leaderboard scores."""
 
+# DATABASE CODE MAP
+# 1. initialize_database(): create the score table on first launch.
+# 2. save_score() and get_top_scores(): game submission and public leaderboard.
+# 3. get_all_scores(), delete_score(), delete_all_scores(): admin actions.
+
 import sqlite3
 from contextlib import closing
 from pathlib import Path

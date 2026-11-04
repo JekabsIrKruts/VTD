@@ -42,15 +42,15 @@ py -m venv .venv
 
 ## API servera palaišana un mājaslapa
 
-API serveri un spēli palaid atsevišķos PowerShell logos. Vispirms palaid serveri
-projekta mapē:
+Palaižot spēli, tā automātiski ieslēdz API serveri, ja tas vēl nedarbojas.
+Palaistais serveris tiek apturēts, kad spēle tiek aizvērta. Ja vēlies atvērt
+mājaslapu arī bez spēles, vari serveri palaist atsevišķi:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn api.main:app --reload
 ```
 
-Atstāj servera logu atvērtu un otrā logā palaid spēli. Kamēr serveris darbojas,
-mājaslapas ir pieejamas pārlūkā:
+Kamēr serveris darbojas, mājaslapas ir pieejamas pārlūkā:
 
 - Līderu tabula: <http://127.0.0.1:8000/>
 - Admin panelis: <http://127.0.0.1:8000/admin>
@@ -89,7 +89,8 @@ iestatīšanas restartē API serveri un ievadi to admin paneļa paroles laukā.
 
 ## Projekta struktūra
 
-- `game/rules.py` glabā spēles datus un noteikumus, un neimportē Pygame.
+- `game/rules.py` glabā spēles datus un noteikumus, tostarp varžu un mušu jautājumus; tas neimportē Pygame.
 - `client/main.py` apstrādā ievadi un zīmē spēles ekrānus ar Pygame.
+- `assets/textures/` glabā spēles varžu, mušu un šāviņu attēlus.
 - `api/main.py` nodrošina rezultātu API, līderu tabulu un admin paneli.
 - `api/db.py` saglabā rezultātus SQLite datubāzē `api/scores.db`.

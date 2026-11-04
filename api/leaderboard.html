@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <!-- PAGE MAP: styles in head; leaderboard layout in main; score loading at bottom. -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1e7039">
@@ -147,6 +148,27 @@
     tr.bronze .rank { color: #a45b2d; }
 
     .status { min-height: 19px; margin: 13px 2px 0; color: var(--muted); font-size: 13px; }
+    .rules {
+      margin-top: 18px;
+      padding: 25px clamp(16px, 4vw, 34px) 30px;
+      background: var(--paper);
+      border: 1px solid rgba(18,58,31,.12);
+      border-radius: 20px;
+      box-shadow: 0 18px 38px rgba(10,42,22,.2);
+    }
+    .rules h2 { margin: 0; font-size: 25px; letter-spacing: -.02em; }
+    .rules-intro { margin: 6px 0 20px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .rule-card {
+      padding: 15px 17px;
+      background: var(--white);
+      border: 1px solid #e5e9dc;
+      border-left: 4px solid var(--leaf);
+      border-radius: 12px;
+    }
+    .rule-card h3 { margin: 0 0 6px; color: var(--deep-grass); font-size: 16px; }
+    .rule-card p { margin: 0; color: #405447; font-size: 14px; line-height: 1.55; }
+    .rule-card strong { color: var(--ink); }
     .footer { padding: 17px 0 0; color: rgba(255,255,255,.8); font-size: 12px; text-align: center; }
     .footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -155,8 +177,12 @@
       .hero { min-height: 116px; padding: 20px 17px; gap: 13px; }
       .frog-mark { flex-basis: 68px; width: 68px; height: 64px; }
       .board { padding: 20px 12px 22px; }
+      .rules { padding: 20px 12px 22px; }
       .board-heading h2 { font-size: 21px; }
+      .rules h2 { font-size: 21px; }
       .board-heading p { max-width: 190px; line-height: 1.35; }
+      .rule-grid { grid-template-columns: 1fr; gap: 9px; }
+      .rule-card { padding: 13px 14px; }
       .refresh { padding: 9px 10px; font-size: 12px; }
       th:first-child { width: 55px; }
       th:last-child { width: 105px; }
@@ -210,6 +236,44 @@
         <tbody id="score-rows"></tbody>
       </table>
       <p class="status" id="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="rules" aria-labelledby="rules-title">
+      <h2 id="rules-title">How to play</h2>
+      <p class="rules-intro">Build a team of frogs, protect the path, and survive all 10 waves. Enemies that reach the end deal damage to your HP.</p>
+      <div class="rule-grid">
+        <article class="rule-card">
+          <h3>1. Place your frogs</h3>
+          <p>You start with <strong>1,000 wings (ω)</strong>. Choose a frog from the top of the screen, then drag it onto an open green space. Frogs cannot be placed on the path. They automatically attack enemies in range. Hover over a frog, or drag one to see its range.</p>
+        </article>
+        <article class="rule-card">
+          <h3>2. Prepare for each wave</h3>
+          <p>Before a wave, answer its question and plan your defense. Select <strong>Next Round</strong> to preview the enemy types and counts, then choose <strong>Start Wave</strong> when you are ready. You can place and upgrade frogs during a wave too.</p>
+        </article>
+        <article class="rule-card">
+          <h3>3. Answer the questions</h3>
+          <p>Choose an answer by clicking it or pressing 1, 2, or 3. Correct frog answers add <strong>2,000 points</strong>. A wrong answer makes that wave 1.5× faster; clearing it earns a 1,000-point bonus. Frog questions can be skipped. After a skip, the next wave gets a harder fly question instead: it cannot be skipped, a correct answer adds 6,000 points, and a wrong answer makes that wave 2× faster with a 3,000-point clear bonus.</p>
+        </article>
+        <article class="rule-card">
+          <h3>4. Earn and spend wings</h3>
+          <p>Frogs earn wings when they defeat enemies. Spend wings to place frogs and buy upgrades: click a placed frog to view its next upgrade, price, and effects. Each frog can be upgraded through three tiers.</p>
+        </article>
+        <article class="rule-card">
+          <h3>5. Protect your HP</h3>
+          <p>You start with <strong>1,000 HP</strong>, which carries between waves. Enemies deal different damage when they reach the end. If HP reaches zero, the game ends.</p>
+        </article>
+        <article class="rule-card">
+          <h3>Mama Frog’s offering</h3>
+          <p>Before wave 6, choose whether to trade HP for wings at the displayed rate, while keeping at least 1 HP. If you are at full HP, you can instead sacrifice all but 1 HP to bless the remaining flies, reducing their HP by 10%.</p>
+        </article>
+        <article class="rule-card">
+          <h3>Score and finish</h3>
+          <p>Your wave score starts at <strong>10,000</strong> and counts down after all enemies have entered. Clear the wave to add its remaining points and any quiz bonus to your total. Survive all 10 waves, then save your username and score to the leaderboard.</p>
+        </article>
+        <article class="rule-card">
+          <h3>Pause any time</h3>
+          <p>Use <strong>Pause</strong> to stop the action. Resume the game, return to the main menu, or exit from the pause menu.</p>
+        </article>
+      </div>
     </section>
     <footer class="footer">Vardes Tower Defense · <a href="/admin">Admin</a></footer>
   </main>

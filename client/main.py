@@ -1,11 +1,22 @@
 """Pygame screens, buttons, input handling, and drawing for the game model."""
 
-import random
+# CLIENT CODE MAP
+# 1. API score submission and display/texture helpers.
+# 2. Question and Mama Frog screens.
+# 3. Main menu, completion, and game-over screens.
+# 4. play_game(): game setup, input, simulation, and board drawing.
+# 5. main(): moves between the menu and game screens.
+
 import json
+import math
+import random
+import subprocess
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.request
+from collections import deque
 from pathlib import Path
 
 import pygame
@@ -34,10 +45,92 @@ from game.rules import (
 SCALE_X = 1.0
 SCALE_Y = 1.0
 _AURA_SURFACES = {}
+TEXTURE_DIR = Path(project_root) / "assets" / "textures"
+BOARD_TEXTURE_SCALE = 1.5
+_TEXTURES = {}
+_SCALED_TEXTURES = {}
+ENEMY_TEXTURES = {
+    "musas": "musa",
+    "scorpion_musas": "Scorpion_musa",
+    "stalk_eyed_musas": "Stalk-eyed_musa",
+    "bee_musas": "bee_fly",
+    "mydas_musas": "mydas_fly",
+    "picture_winged_musas": "picture-winged_fly",
+    "mama_musa": "mama_musa",
+}
+TOWER_TEXTURES = {
+    "hairy_frog": "hairy_frog",
+    "flea toad": "flea_toad",
+    "black rain frog": "black_rain_frog",
+    "surinam horned frog": "surinam_horned_frog",
+    "glass frog": "glass_frog",
+}
 SCORE_API_URL = "http://127.0.0.1:8000/scores"
+API_CHECK_URL = f"{SCORE_API_URL}/top"
 
 
 # SCORE API
+def api_is_available():
+    """Check whether a working leaderboard API already responds locally."""
+    try:
+        with urllib.request.urlopen(API_CHECK_URL, timeout=0.35) as response:
+            return response.status == 200
+    except (urllib.error.URLError, TimeoutError):
+        return False
+
+
+def start_api_server():
+    """Start Uvicorn silently if needed and return only the process we own."""
+    if api_is_available():
+        return None
+
+    command = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "api.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+    ]
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    try:
+        server = subprocess.Popen(
+            command,
+            cwd=project_root,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creation_flags,
+        )
+    except OSError:
+        return None
+
+    startup_deadline = time.monotonic() + 10
+    while time.monotonic() < startup_deadline:
+        if api_is_available():
+            return server
+        if server.poll() is not None:
+            return None
+        time.sleep(0.1)
+
+    stop_api_server(server)
+    return None
+
+
+def stop_api_server(server):
+    """Stop the Uvicorn process started by this game, leaving existing servers alone."""
+    if server is None or server.poll() is not None:
+        return
+    server.terminate()
+    try:
+        server.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        server.kill()
+        server.wait(timeout=5)
+
+
 def submit_score(username, score):
     """Send the final username and score to the local leaderboard API."""
     payload = json.dumps({"username": username, "score": int(score)}).encode("utf-8")
@@ -96,6 +189,95 @@ def scaled_radius(radius):
     return round(radius * (SCALE_X + SCALE_Y) / 2)
 
 
+def load_textures():
+    """Load the game's PNG sprites once the display has been initialized."""
+    if _TEXTURES:
+        return
+    for image_path in TEXTURE_DIR.glob("*.png"):
+        texture = pygame.image.load(str(image_path)).convert_alpha()
+        if image_path.stem in {"mydas_fly", "surinam_horned_frog_rocket"}:
+            texture = remove_edge_black_background(texture)
+        visible_bounds = texture.get_bounding_rect()
+        _TEXTURES[image_path.stem] = texture.subsurface(visible_bounds).copy()
+
+
+def remove_edge_black_background(image):
+    """Make edge-connected black background transparent without erasing sprite details."""
+    cleaned = image.copy()
+    width, height = cleaned.get_size()
+    pending = deque()
+    visited = bytearray(width * height)
+
+    for x in range(width):
+        pending.append((x, 0))
+        pending.append((x, height - 1))
+    for y in range(height):
+        pending.append((0, y))
+        pending.append((width - 1, y))
+
+    while pending:
+        x, y = pending.popleft()
+        index = y * width + x
+        if visited[index]:
+            continue
+        visited[index] = 1
+        red, green, blue, alpha = cleaned.get_at((x, y))
+        brightness = max(red, green, blue)
+        if alpha == 0 or brightness > 30:
+            continue
+
+        cleaned.set_at((x, y), (red, green, blue, round(alpha * brightness / 30)))
+        if x > 0:
+            pending.append((x - 1, y))
+        if x + 1 < width:
+            pending.append((x + 1, y))
+        if y > 0:
+            pending.append((x, y - 1))
+        if y + 1 < height:
+            pending.append((x, y + 1))
+    return cleaned
+
+
+def tower_texture(tower_type, upgrade_tier):
+    """Return the sprite name for a frog's current upgrade tier."""
+    suffix = f"_T{upgrade_tier}" if upgrade_tier else ""
+    return f"{TOWER_TEXTURES[tower_type]}{suffix}"
+
+
+def draw_texture(screen, texture_name, center, logical_size, alpha=255, rotation=None):
+    """Draw a cached, scaled pixel-art sprite centered at a logical position."""
+    source = _TEXTURES.get(texture_name)
+    if source is None:
+        return False
+
+    size = max(1, scaled_radius(logical_size))
+    cache_key = (texture_name, size)
+    sprite = _SCALED_TEXTURES.get(cache_key)
+    if sprite is None:
+        source_width, source_height = source.get_size()
+        if source_width >= source_height:
+            scaled_size = (size, max(1, round(size * source_height / source_width)))
+        else:
+            scaled_size = (max(1, round(size * source_width / source_height)), size)
+        sprite = pygame.transform.scale(source, scaled_size)
+        _SCALED_TEXTURES[cache_key] = sprite
+
+    if rotation is not None:
+        rotation = round(rotation / 5) * 5
+        rotated_key = (texture_name, size, rotation)
+        rotated_sprite = _SCALED_TEXTURES.get(rotated_key)
+        if rotated_sprite is None:
+            rotated_sprite = pygame.transform.rotate(sprite, rotation)
+            _SCALED_TEXTURES[rotated_key] = rotated_sprite
+        sprite = rotated_sprite
+
+    if alpha < 255:
+        sprite = sprite.copy()
+        sprite.set_alpha(max(0, alpha))
+    screen.blit(sprite, sprite.get_rect(center=screen_position(center)))
+    return True
+
+
 def draw_tower_aura(screen, center, logical_radius, color, alpha):
     """Draw a cached translucent range circle for a frog's special aura."""
     radius = max(1, scaled_radius(logical_radius))
@@ -142,6 +324,33 @@ def wrap_text(text, selected_font, max_width):
 
 
 # QUESTION AND MAMA FROG SCREENS
+def show_answer_feedback(screen, clock, result):
+    """Show a brief correct/incorrect popup and report whether the window stayed open."""
+    popup = pygame.Rect(285, 180, 230, 90)
+    is_correct = result == "correct"
+    color = (45, 140, 65) if is_correct else (175, 55, 55)
+    label = "Correct!" if is_correct else "Incorrect!"
+
+    pygame.draw.rect(screen, color, screen_rect(popup), border_radius=scaled_radius(10))
+    pygame.draw.rect(
+        screen,
+        (255, 255, 255),
+        screen_rect(popup),
+        width=max(1, scaled_radius(3)),
+        border_radius=scaled_radius(10),
+    )
+    blit_centered(screen, font(38).render(label, True, (255, 255, 255)), popup.center)
+    pygame.display.flip()
+
+    feedback_ends_at = pygame.time.get_ticks() + 900
+    while pygame.time.get_ticks() < feedback_ends_at:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+        clock.tick(60)
+    return True
+
+
 def show_question(screen, clock, data, can_skip, topic):
     """Show a three-answer quiz and return correct, incorrect, skip, or quit."""
     answers = list(data["answers"])
@@ -154,6 +363,7 @@ def show_question(screen, clock, data, can_skip, topic):
     skip_button = pygame.Rect(300, 400, 200, 40)
 
     while True:
+        answer_result = None
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return "quit"
@@ -161,11 +371,15 @@ def show_question(screen, clock, data, can_skip, topic):
                 pos = canvas_position(event.pos)
                 for index, button in enumerate(buttons):
                     if button.collidepoint(pos):
-                        return "correct" if index == correct_index else "incorrect"
+                        answer_result = "correct" if index == correct_index else "incorrect"
+                        break
+                if answer_result is not None:
+                    break
                 if can_skip and skip_button.collidepoint(pos):
                     return "skip"
             if event.type == pygame.KEYDOWN and event.unicode in {"1", "2", "3"}:
-                return "correct" if int(event.unicode) - 1 == correct_index else "incorrect"
+                answer_result = "correct" if int(event.unicode) - 1 == correct_index else "incorrect"
+                break
 
         screen.fill(GRASS_GREEN)
         blit_centered(screen, font(34).render(topic, True, (255, 255, 255)), (400, 45))
@@ -180,6 +394,8 @@ def show_question(screen, clock, data, can_skip, topic):
             color = (110, 110, 110) if skip_button.collidepoint(mouse) else (80, 80, 80)
             pygame.draw.rect(screen, color, screen_rect(skip_button), border_radius=scaled_radius(8))
             blit_centered(screen, answer_font.render("Skip", True, (255, 255, 255)), skip_button.center)
+        if answer_result is not None:
+            return answer_result if show_answer_feedback(screen, clock, answer_result) else "quit"
         pygame.display.flip()
         clock.tick(60)
 
@@ -388,6 +604,7 @@ def show_game_over(total_score):
 def play_game():
     """Run gameplay input, simulation, buttons, popups, and board drawing."""
     screen, clock = create_screen(), pygame.time.Clock()
+    load_textures()
     pygame.display.set_caption("VTD")
     game = Game()
 
@@ -398,8 +615,7 @@ def play_game():
         tower: pygame.Rect(tower_left + i * (tower_width + tower_gap), 3, tower_width, 49)
         for i, tower in enumerate(TOWER_TYPES)
     }
-    # BOARD ACTION BUTTONS: enemy-clear, pause, and next-wave controls.
-    destroy_button = pygame.Rect(520, 320, 260, 48)
+    # BOARD ACTION BUTTONS: pause and next-wave controls.
     pause_button = pygame.Rect(SCREEN_WIDTH - 110, 6, 100, 42)
     next_round_button = pygame.Rect(SCREEN_WIDTH - 190, 85, 170, 44)
     # WAVE PREVIEW BUTTONS: close the popup or start the shown wave.
@@ -413,7 +629,7 @@ def play_game():
     resume_button = pygame.Rect(280, 190, 240, 52)
     menu_button = pygame.Rect(280, 255, 240, 52)
     pause_exit_button = pygame.Rect(280, 320, 240, 52)
-    forbidden = [*tower_buttons.values(), pause_button, destroy_button, next_round_button]
+    forbidden = [*tower_buttons.values(), pause_button, next_round_button]
     forbidden_boxes = [(r.x, r.y, r.width, r.height) for r in forbidden]
 
     dragging_tower = None
@@ -428,8 +644,6 @@ def play_game():
 
     while True:
         dt = clock.tick(60) / 1000.0
-        destroy_requested = False
-
         if game.needs_round_question():
             upgrade_popup_open = False
             selected_tower_index = None
@@ -481,8 +695,6 @@ def play_game():
                         dragging_tower = selected
                     elif pause_button.collidepoint(pos):
                         paused, paused_frame = True, screen.copy()
-                    elif destroy_button.collidepoint(pos):
-                        destroy_requested = True
                     else:
                         selected_tower_index = next(
                             (
@@ -516,8 +728,6 @@ def play_game():
             pygame.display.flip()
             continue
 
-        if destroy_requested:
-            game.destroy_all_enemies()
         game.update(dt)
         if game.game_over:
             return "game_over", game.total_score
@@ -548,36 +758,54 @@ def play_game():
                     data["zone_alpha"],
                 )
             rect = pygame.Rect(round(tower["x"] - data["size"] / 2), round(tower["y"] - data["size"] / 2), data["size"], data["size"])
-            pygame.draw.rect(screen, data["color"], screen_rect(rect))
-            pygame.draw.rect(screen, (20, 55, 25), screen_rect(rect), width=max(1, scaled_radius(2)))
+            draw_texture(
+                screen,
+                tower_texture(tower["type"], tower["upgrade_tier"]),
+                (tower["x"], tower["y"]),
+                data["size"] * BOARD_TEXTURE_SCALE,
+                rotation=tower.get("aim_rotation", 0.0),
+            )
 
         for enemy in game.enemies:
             x, y = game.enemy_position(enemy)
             data = ENEMY_TYPES[enemy["type"]]
-            pygame.draw.circle(screen, data["color"], screen_position((x, y)), scaled_radius(data["radius"]))
-            bar_width = max(20, data["radius"] * 2)
-            bar = pygame.Rect(round(x - bar_width / 2), round(y - data["radius"] - 8), bar_width, 4)
+            draw_texture(
+                screen,
+                ENEMY_TEXTURES[enemy["type"]],
+                (x, y),
+                data["radius"] * 2 * BOARD_TEXTURE_SCALE,
+            )
+            bar_width = max(20, round(data["radius"] * 2 * BOARD_TEXTURE_SCALE))
+            bar = pygame.Rect(round(x - bar_width / 2), round(y - data["radius"] * BOARD_TEXTURE_SCALE - 8), bar_width, 4)
             pygame.draw.rect(screen, (100, 25, 25), screen_rect(bar))
             fill = pygame.Rect(bar.x, bar.y, round(bar.width * max(0, enemy["hp"] / enemy["max_hp"])), bar.height)
             pygame.draw.rect(screen, (70, 220, 80), screen_rect(fill))
 
         for enemy in game.defeated_enemies:
             x, y = game.enemy_position(enemy)
-            original_color = ENEMY_TYPES[enemy["type"]]["color"]
             fade = max(0.0, enemy["fade_remaining"] / enemy["fade_duration"])
-            fade_color = tuple(
-                round(GRASS_GREEN[channel] + (original_color[channel] - GRASS_GREEN[channel]) * fade)
-                for channel in range(3)
-            )
-            pygame.draw.circle(
+            draw_texture(
                 screen,
-                fade_color,
-                screen_position((x, y)),
-                scaled_radius(ENEMY_TYPES[enemy["type"]]["radius"]),
+                ENEMY_TEXTURES[enemy["type"]],
+                (x, y),
+                ENEMY_TYPES[enemy["type"]]["radius"] * 2 * BOARD_TEXTURE_SCALE,
+                alpha=round(fade * 255),
             )
 
         for shot in game.projectiles:
-            pygame.draw.circle(screen, shot["color"], screen_position((shot["x"], shot["y"])), scaled_radius(shot["size"]))
+            texture_name = shot.get("projectile_sprite")
+            if texture_name:
+                target_x, target_y = game.enemy_position(shot["target"])
+                rotation = -math.degrees(math.atan2(target_y - shot["y"], target_x - shot["x"])) - 90
+                draw_texture(
+                    screen,
+                    texture_name,
+                    (shot["x"], shot["y"]),
+                    shot["size"] * 2,
+                    rotation=rotation if texture_name != "black_rain_frog_T3_projectile" else None,
+                )
+            else:
+                pygame.draw.circle(screen, shot["color"], screen_position((shot["x"], shot["y"])), scaled_radius(shot["size"]))
 
         for effect in game.effects:
             progress = 1.0 - effect["remaining"] / effect["duration"]
@@ -607,33 +835,39 @@ def play_game():
             color = (75, 75, 75) if not affordable else ((90, 170, 85) if hover else (55, 125, 70))
             pygame.draw.rect(screen, color, screen_rect(rect), border_radius=scaled_radius(6))
             surface_rect = screen_rect(rect)
-            label_size = 18
+            draw_texture(screen, tower_texture(tower_type, 0), (rect.x + 23, rect.centery), 38)
+            label_size = 14
             label_font = font(label_size)
-            lines = wrap_text(f"{data['name']} {data['price']}ω", label_font, surface_rect.width - scaled_radius(12))
-            while len(lines) * label_font.get_linesize() > surface_rect.height - scaled_radius(6) and label_size > 12:
+            label_width = surface_rect.width - scaled_radius(48)
+            lines = wrap_text(data["name"], label_font, label_width) + [f"{data['price']}ω"]
+            while len(lines) * label_font.get_linesize() > surface_rect.height - scaled_radius(2) and label_size > 10:
                 label_size -= 1
                 label_font = font(label_size)
-                lines = wrap_text(f"{data['name']} {data['price']}ω", label_font, surface_rect.width - scaled_radius(12))
+                lines = wrap_text(data["name"], label_font, label_width) + [f"{data['price']}ω"]
             first_y = surface_rect.centery - len(lines) * label_font.get_linesize() // 2
             for i, line in enumerate(lines):
                 label = label_font.render(line, True, (255, 255, 255))
-                screen.blit(label, label.get_rect(center=(surface_rect.centerx, first_y + label_font.get_linesize() // 2 + i * label_font.get_linesize())))
+                screen.blit(label, label.get_rect(midleft=(surface_rect.left + scaled_radius(46), first_y + label_font.get_linesize() // 2 + i * label_font.get_linesize())))
 
         if dragging_tower:
             data = TOWER_TYPES[dragging_tower]
             pygame.draw.circle(screen, (170, 230, 180), screen_position(mouse), scaled_radius(data["range"]), width=max(1, scaled_radius(3)))
             valid = game.can_place_tower(mouse, dragging_tower, forbidden_boxes)
             rect = pygame.Rect(round(mouse[0] - data["size"] / 2), round(mouse[1] - data["size"] / 2), data["size"], data["size"])
-            pygame.draw.rect(screen, (80, 230, 100) if valid else (230, 70, 70), screen_rect(rect))
+            draw_texture(screen, tower_texture(dragging_tower, 0), mouse, data["size"] * BOARD_TEXTURE_SCALE, alpha=180)
+            pygame.draw.rect(
+                screen,
+                (80, 230, 100) if valid else (230, 70, 70),
+                screen_rect(rect),
+                width=max(1, scaled_radius(2)),
+            )
 
         blit_at(screen, hud_font.render(f"Round points: {round(game.round_score)}", True, (255, 255, 255)), (10, 60))
         blit_at(screen, hud_font.render(f"Total score: {game.total_score}", True, (255, 255, 255)), (10, 88))
         blit_at(screen, hud_font.render(f"HP: {game.player_hp}/{PLAYER_MAX_HP}", True, (255, 255, 255)), (615, 135))
         blit_at(screen, hud_font.render(f"Wings (ω): {game.wings}", True, (255, 255, 255)), (615, 170))
 
-        # VISIBLE BOARD BUTTONS: the debug clear action and pause menu.
-        pygame.draw.rect(screen, (170, 55, 55), screen_rect(destroy_button), border_radius=scaled_radius(8))
-        blit_centered(screen, font(40).render("Destroy enemies", True, (255, 255, 255)), destroy_button.center)
+        # VISIBLE BOARD BUTTON: open the pause menu.
         pygame.draw.rect(screen, (55, 125, 70), screen_rect(pause_button), border_radius=scaled_radius(8))
         blit_centered(screen, font(40).render("Pause", True, (255, 255, 255)), pause_button.center)
 
@@ -653,11 +887,12 @@ def play_game():
                 counts = game.next_wave_summary()
                 for i, (enemy_type, amount) in enumerate(counts):
                     row_y = popup_rect.y + 102 + i * 40
-                    enemy_data = ENEMY_TYPES[enemy_type]
-                    radius = min(enemy_data["radius"], 18)
-                    center = screen_position((popup_rect.x + 48, row_y + 12))
-                    pygame.draw.circle(screen, enemy_data["color"], center, scaled_radius(radius))
-                    pygame.draw.circle(screen, (20, 55, 25), center, scaled_radius(radius), width=max(1, scaled_radius(2)))
+                    draw_texture(
+                        screen,
+                        ENEMY_TEXTURES[enemy_type],
+                        (popup_rect.x + 48, row_y + 12),
+                        36,
+                    )
                     blit_at(screen, font(28).render(enemy_type.replace("_", " ").title(), True, (255, 255, 255)), (popup_rect.x + 95, row_y))
                     blit_at(screen, font(28).render(str(amount), True, (255, 255, 255)), (popup_rect.x + 420, row_y))
                 color = (90, 180, 95) if start_button.collidepoint(mouse) else (65, 145, 75)
@@ -675,10 +910,12 @@ def play_game():
             pygame.draw.rect(screen, (165, 55, 55), screen_rect(upgrade_close_button), border_radius=scaled_radius(5))
             blit_centered(screen, font(23).render("X", True, (255, 255, 255)), upgrade_close_button.center)
             if upgrade_data is None:
-                blit_at(screen, font(26).render(f"{current_data['name']} - Max level", True, (255, 255, 255)), (upgrade_popup_rect.x + 18, upgrade_popup_rect.y + 24))
+                draw_texture(screen, tower_texture(tower["type"], tower["upgrade_tier"]), (upgrade_popup_rect.x + 50, upgrade_popup_rect.y + 48), 58)
+                blit_at(screen, font(26).render(f"{current_data['name']} - Max level", True, (255, 255, 255)), (upgrade_popup_rect.x + 88, upgrade_popup_rect.y + 24))
             else:
-                blit_at(screen, font(26).render(upgrade_data['name'], True, (255, 255, 255)), (upgrade_popup_rect.x + 22, upgrade_popup_rect.y + 18))
-                blit_at(screen, font(22).render(f"Price: {upgrade_data['price']}ω", True, (255, 255, 255)), (upgrade_popup_rect.x + 22, upgrade_popup_rect.y + 52))
+                draw_texture(screen, tower_texture(tower["type"], tower["upgrade_tier"] + 1), (upgrade_popup_rect.x + 50, upgrade_popup_rect.y + 48), 58)
+                blit_at(screen, font(26).render(upgrade_data['name'], True, (255, 255, 255)), (upgrade_popup_rect.x + 88, upgrade_popup_rect.y + 18))
+                blit_at(screen, font(22).render(f"Price: {upgrade_data['price']}ω", True, (255, 255, 255)), (upgrade_popup_rect.x + 88, upgrade_popup_rect.y + 52))
                 description_font = font(18)
                 popup_width = screen_rect(upgrade_popup_rect).width - scaled_radius(44)
                 line_spacing = max(18, round(description_font.get_linesize() / SCALE_Y))
@@ -701,18 +938,23 @@ def play_game():
 
 def main():
     """Start Pygame and move between the menu, game, and ending screens."""
-    pygame.init()
-    while show_menu():
-        result = play_game()
-        if result is None:
-            break
-        kind, score = result
-        if kind == "menu":
-            continue
-        action = show_game_over(score) if kind == "game_over" else show_end_menu(score)
-        if action == "exit":
-            break
-    pygame.quit()
+    api_server = start_api_server()
+    try:
+        pygame.init()
+        while show_menu():
+            result = play_game()
+            if result is None:
+                break
+            kind, score = result
+            if kind == "menu":
+                continue
+            action = show_game_over(score) if kind == "game_over" else show_end_menu(score)
+            if action == "exit":
+                break
+    finally:
+        if pygame.get_init():
+            pygame.quit()
+        stop_api_server(api_server)
 
 
 if __name__ == "__main__":
