@@ -498,7 +498,7 @@ DEFEATED_ENEMY_FADE_SECONDS = 0.5
 
 # CURRENCY SETTINGS: wings pay for frogs/upgrades and HP trades.
 STARTING_WINGS = 1000
-WINGS_PER_HP = 1
+WINGS_PER_HP = 3
 
 # QUIZ CONTENT: edit prompts and answers; `correct` is an answer index from 0 to 2.
 FROG_QUESTIONS = [
